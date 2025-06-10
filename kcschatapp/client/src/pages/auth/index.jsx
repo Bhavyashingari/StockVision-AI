@@ -1,4 +1,4 @@
-import Background from "../../assets/login2.png";
+import Background from "../../assets/kcslogo.png";
 import Victory from "../../assets/victory.svg";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -90,7 +90,7 @@ const Auth = () => {
         <div className="flex flex-col gap-10 items-center justify-center">
           <div className="flex  items-center justify-center flex-col">
             <div className="flex  items-center justify-center">
-              <h1 className="text-5xl md:text-6xl font-bold">Welcome</h1>
+              <h1 className="text-5xl md:text-6xl font-bold">Welcome To KCS</h1>
               <img src={Victory} className="h-[100px]" />
             </div>
             <p className="font-medium text-center">
