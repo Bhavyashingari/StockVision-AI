@@ -4,25 +4,48 @@ import Message from "../model/MessagesModel.js";
 
 export const getAllContacts = async (request, response, next) => {
   try {
+    const clerkUserId = request.auth?.userId;
+    if (!clerkUserId) {
+      return response.status(401).send("User not authenticated.");
+    }
+    const localUser = await User.findOne({ clerkUserId: clerkUserId });
+    if (!localUser) {
+      return response.status(404).send("Authenticated user not found in local database.");
+    }
+    const localUserId = localUser._id;
+
     const users = await User.find(
-      { _id: { $ne: request.userId } },
-      "firstName lastName _id"
+      { _id: { $ne: localUserId } }, // Exclude the current user by their MongoDB _id
+      "firstName lastName _id email image color clerkUserId" // Added more fields
     );
 
     const contacts = users.map((user) => ({
-      label: `${user.firstName} ${user.lastName}`,
-      value: user._id,
+      label: `${user.firstName} ${user.lastName} (${user.email})`, // Added email to label for clarity
+      value: user._id, // MongoDB _id
+      clerkUserId: user.clerkUserId, // Include Clerk ID
+      image: user.image,
+      color: user.color,
     }));
 
     return response.status(200).json({ contacts });
   } catch (error) {
-    console.log({ error });
+    console.error("Error in getAllContacts:", error);
     return response.status(500).send("Internal Server Error.");
   }
 };
 
 export const searchContacts = async (request, response, next) => {
   try {
+    const clerkUserId = request.auth?.userId;
+    if (!clerkUserId) {
+      return response.status(401).send("User not authenticated.");
+    }
+    const localUser = await User.findOne({ clerkUserId: clerkUserId });
+    if (!localUser) {
+      return response.status(404).send("Authenticated user not found in local database.");
+    }
+    const localUserId = localUser._id;
+
     const { searchTerm } = request.body;
 
     if (searchTerm === undefined || searchTerm === null) {
@@ -36,33 +59,49 @@ export const searchContacts = async (request, response, next) => {
 
     const regex = new RegExp(sanitizedSearchTerm, "i");
 
-    const contacts = await User.find({
+    const users = await User.find({ // Changed from contacts to users to match mapping
       $and: [
-        { _id: { $ne: request.userId } },
+        { _id: { $ne: localUserId } }, // Exclude current user by MongoDB _id
         {
           $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
         },
       ],
-    });
+    }, "firstName lastName _id email image color clerkUserId"); // Select fields
+
+    // Map to desired contact format if needed, or return users directly
+    const contacts = users.map(user => ({
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        image: user.image,
+        color: user.color,
+        clerkUserId: user.clerkUserId,
+    }));
+
     return response.status(200).json({ contacts });
   } catch (error) {
-    console.log({ error });
+    console.error("Error in searchContacts:", error);
     return response.status(500).send("Internal Server Error.");
   }
 };
 
 export const getContactsForList = async (req, res, next) => {
   try {
-    let { userId } = req;
-    userId = new mongoose.Types.ObjectId(userId);
-
-    if (!userId) {
-      return res.status(400).send("User ID is required.");
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      return res.status(401).send("User not authenticated.");
     }
+    const localUser = await User.findOne({ clerkUserId: clerkUserId });
+    if (!localUser) {
+      return res.status(404).send("Authenticated user not found in local database.");
+    }
+    const localUserMongoId = localUser._id; // This is already an ObjectId
+
     const contacts = await Message.aggregate([
       {
         $match: {
-          $or: [{ sender: userId }, { recipient: userId }],
+          $or: [{ sender: localUserMongoId }, { recipient: localUserMongoId }],
         },
       },
       {

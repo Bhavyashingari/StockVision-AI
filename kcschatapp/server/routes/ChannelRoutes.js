@@ -5,17 +5,17 @@ import {
   getUserChannels,
   joinChannelByLink,
 } from "../controllers/ChannelControllers.js";
-import { verifyToken } from "../middlewares/AuthMiddleware.js";
+import { ensureAuthenticated } from "../middlewares/AuthMiddleware.js"; // Import ensureAuthenticated
 
 const channelRoutes = Router();
 
-channelRoutes.post("/create-channel", verifyToken, createChannel);
-channelRoutes.get("/get-user-channels", verifyToken, getUserChannels);
+channelRoutes.post("/create-channel", ensureAuthenticated, createChannel);
+channelRoutes.get("/get-user-channels", ensureAuthenticated, getUserChannels);
 channelRoutes.get(
   "/get-channel-messages/:channelId",
-  verifyToken,
+  ensureAuthenticated,
   getChannelMessages
 );
-channelRoutes.get("/join/:link", verifyToken, joinChannelByLink);
+channelRoutes.get("/join/:link", ensureAuthenticated, joinChannelByLink);
 
 export default channelRoutes;

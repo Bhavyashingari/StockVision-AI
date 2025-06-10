@@ -1,29 +1,43 @@
 import Message from "../model/MessagesModel.js";
+import User from "../model/UserModel.js"; // Import User model
 import { mkdirSync, renameSync } from "fs";
 
 export const getMessages = async (req, res, next) => {
   try {
-    const user1 = req.userId;
-    const user2 = req.body.id;
-    if (!user1 || !user2) {
-      return res.status(400).send("Both user IDs are required.");
+    const clerkUserId = req.auth?.userId;
+    const recipientMongoId = req.body.id; // Assuming this is the MongoDB _id of the other user
+
+    if (!clerkUserId) {
+      return res.status(401).send("User not authenticated.");
     }
+    if (!recipientMongoId) {
+      return res.status(400).send("Recipient ID is required.");
+    }
+
+    const localUser = await User.findOne({ clerkUserId: clerkUserId });
+    if (!localUser) {
+      return res.status(404).send("Authenticated user not found in local database.");
+    }
+    const senderMongoId = localUser._id;
 
     const messages = await Message.find({
       $or: [
-        { sender: user1, recipient: user2 },
-        { sender: user2, recipient: user1 },
+        { sender: senderMongoId, recipient: recipientMongoId },
+        { sender: recipientMongoId, recipient: senderMongoId },
       ],
     }).sort({ timestamp: 1 });
 
     return res.status(200).json({ messages });
   } catch (err) {
-    console.log(err);
+    console.error("Error in getMessages:", err);
     return res.status(500).send("Internal Server Error");
   }
 };
 
 export const uploadFile = async (request, response, next) => {
+  // This function does not directly use userId, but ensureAuthenticated middleware
+  // protects it. If any user-specific logic were added (e.g., tracking who uploaded),
+  // req.auth.userId (Clerk ID) and subsequent lookup for local MongoDB _id would be needed.
   try {
     if (request.file) {
       console.log("in try if");

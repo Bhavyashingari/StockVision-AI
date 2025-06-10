@@ -1,15 +1,16 @@
 import { Router } from "express";
 import {
   getAllContacts,
+  getAllContacts,
   getContactsForList,
   searchContacts,
-} from "../controllers/ContacsControllers.js";
-import { verifyToken } from "../middlewares/AuthMiddleware.js";
+} from "../controllers/ContacsControllers.js"; // Note: Typo in original filename 'ContacsControllers.js'
+import { ensureAuthenticated } from "../middlewares/AuthMiddleware.js"; // Updated import
 
 const contactsRoutes = Router();
 
-contactsRoutes.post("/search", verifyToken, searchContacts);
-contactsRoutes.get("/all-contacts", verifyToken, getAllContacts);
-contactsRoutes.get("/get-contacts-for-list", verifyToken, getContactsForList);
+contactsRoutes.post("/search", ensureAuthenticated, searchContacts); // Updated middleware
+contactsRoutes.get("/all-contacts", ensureAuthenticated, getAllContacts); // Updated middleware
+contactsRoutes.get("/get-contacts-for-list", ensureAuthenticated, getContactsForList); // Updated middleware
 
 export default contactsRoutes;

@@ -1,11 +1,13 @@
 import { Server as SocketIOServer } from "socket.io";
 import Message from "./model/MessagesModel.js";
 import Channel from "./model/ChannelModel.js";
+import User from "./model/UserModel.js"; // Import User model
+import { clerkClient } from "@clerk/express"; // Import clerkClient
 
 const setupSocket = (server) => {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.ORIGIN,
+      origin: process.env.ORIGIN, // Ensure ORIGIN is correctly set for your client
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -88,84 +90,129 @@ const setupSocket = (server) => {
   };
 
   const disconnect = (socket) => {
-    console.log("Client disconnected", socket.id);
-    for (const [userId, socketId] of userSocketMap.entries()) {
-      if (socketId === socket.id) {
-        userSocketMap.delete(userId);
-        break;
+    console.log(`Client disconnected: ${socket.id}, User: ${socket.localUserId || 'N/A'}`);
+    if (socket.localUserId) { // Use localUserId attached to socket
+      userSocketMap.delete(socket.localUserId);
+    } else { // Fallback if localUserId was not set (e.g., auth failed)
+      for (const [userId, socketId] of userSocketMap.entries()) {
+        if (socketId === socket.id) {
+          userSocketMap.delete(userId);
+          break;
+        }
       }
     }
   };
 
-  io.on("connection", (socket) => {
-    const userId = socket.handshake.query.userId;
+  io.on("connection", async (socket) => { // Make connection handler async
+    const token = socket.handshake.auth?.token;
 
-    if (userId) {
-      userSocketMap.set(userId, socket.id);
-      console.log(`User connected: ${userId} with socket ID: ${socket.id}`);
-    } else {
-      console.log("User ID not provided during connection.");
+    if (!token) {
+      console.log(`Socket connection attempt from ${socket.id} without token. Disconnecting.`);
+      return socket.disconnect(true);
     }
 
-    socket.on("add-channel-notify", addChannelNotify);
+    try {
+      const requestState = await clerkClient.authenticateRequest({
+        secretKey: process.env.CLERK_SECRET_KEY,
+        publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+        headerToken: token,
+      });
 
-    socket.on("sendMessage", sendMessage);
+      if (!requestState.isSignedIn || !requestState.userId) {
+        console.log(`Socket token invalid or session expired for ${socket.id}. Status: ${requestState.status}. Disconnecting.`);
+        return socket.disconnect(true);
+      }
 
-    socket.on("send-channel-message", sendChannelMessage);
+      const clerkUserId = requestState.userId;
+      const localUser = await User.findOne({ clerkUserId: clerkUserId });
 
-    socket.on("disconnect", () => disconnect(socket));
+      if (!localUser) {
+        console.log(`Authenticated user ${clerkUserId} (socket ${socket.id}) not found in local DB. Disconnecting.`);
+        return socket.disconnect(true);
+      }
 
-    // WebRTC Signaling
+      const localUserId = localUser._id.toString();
+      socket.localUserId = localUserId; // Attach local MongoDB User ID to the socket object
+
+      userSocketMap.set(localUserId, socket.id);
+      console.log(`User ${localUserId} (Clerk: ${clerkUserId}) connected with socket ID: ${socket.id}`);
+
+    } catch (error) {
+      console.error(`Error during socket authentication for ${socket.id}:`, error.message);
+      if (error.errors) console.error('Clerk errors:', JSON.stringify(error.errors));
+      return socket.disconnect(true);
+    }
+
+    // At this point, socket.localUserId is set and can be used by handlers
+
+    socket.on("add-channel-notify", addChannelNotify); // This function needs to be aware of localUserId if it uses it
+
+    // Ensure sendMessage and sendChannelMessage use localUserId for sender
+    // For example, if message object has a 'sender' field, it should be populated with socket.localUserId
+    socket.on("sendMessage", async (message) => { // Assuming message is an object like { recipient: 'recipientMongoId', content: '...' }
+        if (!socket.localUserId) return console.error("sendMessage: sender not authenticated on socket.");
+        await sendMessage({ ...message, sender: socket.localUserId });
+    });
+
+    socket.on("send-channel-message", async (message) => { // Assuming message is { channelId: '...', content: '...' }
+        if (!socket.localUserId) return console.error("sendChannelMessage: sender not authenticated on socket.");
+        await sendChannelMessage({ ...message, sender: socket.localUserId });
+    });
+
+    socket.on("disconnect", () => disconnect(socket)); // disconnect function updated to use socket.localUserId
+
+    // WebRTC Signaling - Update 'from' to use socket.localUserId
+    // targetUserId in data is expected to be the MongoDB _id of the target user
     socket.on("initiate-call", (data) => {
-      // data: { targetUserId, callerInfo, offer }
-      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (!socket.localUserId) return console.error("initiate-call: sender not authenticated on socket.");
+      const targetSocketId = userSocketMap.get(data.targetUserId); // data.targetUserId should be MongoDB _id
       if (targetSocketId) {
         io.to(targetSocketId).emit("call-offer", {
-          from: socket.handshake.query.userId,
+          from: socket.localUserId, // Use local MongoDB _id
           offer: data.offer,
-          callerInfo: data.callerInfo,
+          callerInfo: data.callerInfo, // Ensure callerInfo contains relevant info (like MongoDB _id, name)
         });
       }
     });
 
     socket.on("call-answer", (data) => {
-      // data: { targetUserId, answer }
-      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (!socket.localUserId) return console.error("call-answer: sender not authenticated on socket.");
+      const targetSocketId = userSocketMap.get(data.targetUserId); // data.targetUserId is who initiated the call (MongoDB _id)
       if (targetSocketId) {
         io.to(targetSocketId).emit("call-answered", {
-          from: socket.handshake.query.userId,
+          from: socket.localUserId, // Use local MongoDB _id
           answer: data.answer,
         });
       }
     });
 
     socket.on("call-rejected", (data) => {
-      // data: { targetUserId }
-      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (!socket.localUserId) return console.error("call-rejected: sender not authenticated on socket.");
+      const targetSocketId = userSocketMap.get(data.targetUserId); // data.targetUserId is who initiated the call
       if (targetSocketId) {
         io.to(targetSocketId).emit("call-declined", {
-          from: socket.handshake.query.userId,
+          from: socket.localUserId, // Use local MongoDB _id
         });
       }
     });
 
     socket.on("ice-candidate", (data) => {
-      // data: { targetUserId, candidate }
-      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (!socket.localUserId) return console.error("ice-candidate: sender not authenticated on socket.");
+      const targetSocketId = userSocketMap.get(data.targetUserId); // data.targetUserId is the peer in the call
       if (targetSocketId) {
         io.to(targetSocketId).emit("ice-candidate", {
-          from: socket.handshake.query.userId,
+          from: socket.localUserId, // Use local MongoDB _id
           candidate: data.candidate,
         });
       }
     });
 
     socket.on("end-call", (data) => {
-      // data: { targetUserId }
-      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (!socket.localUserId) return console.error("end-call: sender not authenticated on socket.");
+      const targetSocketId = userSocketMap.get(data.targetUserId); // data.targetUserId is the peer in the call
       if (targetSocketId) {
         io.to(targetSocketId).emit("call-ended", {
-          from: socket.handshake.query.userId,
+          from: socket.localUserId, // Use local MongoDB _id
         });
       }
     });
