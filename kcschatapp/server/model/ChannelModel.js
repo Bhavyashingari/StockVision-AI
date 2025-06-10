@@ -5,6 +5,10 @@ const channelSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  joinLink: {
+    type: String,
+    unique: true,
+  },
   members: [
     {
       type: mongoose.Schema.Types.ObjectId,

@@ -114,6 +114,61 @@ const setupSocket = (server) => {
     socket.on("send-channel-message", sendChannelMessage);
 
     socket.on("disconnect", () => disconnect(socket));
+
+    // WebRTC Signaling
+    socket.on("initiate-call", (data) => {
+      // data: { targetUserId, callerInfo, offer }
+      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("call-offer", {
+          from: socket.handshake.query.userId,
+          offer: data.offer,
+          callerInfo: data.callerInfo,
+        });
+      }
+    });
+
+    socket.on("call-answer", (data) => {
+      // data: { targetUserId, answer }
+      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("call-answered", {
+          from: socket.handshake.query.userId,
+          answer: data.answer,
+        });
+      }
+    });
+
+    socket.on("call-rejected", (data) => {
+      // data: { targetUserId }
+      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("call-declined", {
+          from: socket.handshake.query.userId,
+        });
+      }
+    });
+
+    socket.on("ice-candidate", (data) => {
+      // data: { targetUserId, candidate }
+      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("ice-candidate", {
+          from: socket.handshake.query.userId,
+          candidate: data.candidate,
+        });
+      }
+    });
+
+    socket.on("end-call", (data) => {
+      // data: { targetUserId }
+      const targetSocketId = userSocketMap.get(data.targetUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("call-ended", {
+          from: socket.handshake.query.userId,
+        });
+      }
+    });
   });
 };
 

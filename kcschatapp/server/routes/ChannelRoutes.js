@@ -3,6 +3,7 @@ import {
   createChannel,
   getChannelMessages,
   getUserChannels,
+  joinChannelByLink,
 } from "../controllers/ChannelControllers.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 
@@ -15,5 +16,6 @@ channelRoutes.get(
   verifyToken,
   getChannelMessages
 );
+channelRoutes.get("/join/:link", verifyToken, joinChannelByLink);
 
 export default channelRoutes;

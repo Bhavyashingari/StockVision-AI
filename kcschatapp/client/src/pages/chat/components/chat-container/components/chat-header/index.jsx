@@ -3,8 +3,10 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { useAppStore } from "@/store";
 import { HOST } from "@/lib/constants";
 import { getColor } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Phone } from "lucide-react";
 
-const ChatHeader = () => {
+const ChatHeader = ({ initiateCall, canCall }) => { // Added initiateCall and canCall props
   const { selectedChatData, closeChat, selectedChatType } = useAppStore();
   return (
     <div className="h-[10vh] border-b-2 border-[#2f303b] flex items-center justify-between px-20">
@@ -50,6 +52,17 @@ const ChatHeader = () => {
         </div>
       </div>
       <div className="flex items-center justify-center gap-5">
+        {selectedChatType === "contact" && canCall && ( // Only show call button for contacts and if call is possible
+          <Button
+            onClick={initiateCall}
+            variant="outline"
+            size="icon"
+            className="text-neutral-300 hover:text-white"
+            title="Start video call"
+          >
+            <Phone className="h-6 w-6" />
+          </Button>
+        )}
         <button
           className="text-neutral-300 focus:border-none focus:outline-none focus:text-white transition-all duration-300"
           onClick={closeChat}

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { v4 as uuidv4 } from "uuid";
 import Channel from "../model/ChannelModel.js";
 import User from "../model/UserModel.js";
 
@@ -22,6 +23,7 @@ export const createChannel = async (request, response, next) => {
       name,
       members,
       admin: userId,
+      joinLink: uuidv4(),
     });
 
     await newChannel.save();
@@ -44,6 +46,39 @@ export const getUserChannels = async (req, res) => {
   } catch (error) {
     console.error("Error getting user channels:", error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const joinChannelByLink = async (request, response, next) => {
+  try {
+    const { link } = request.params;
+    const userId = request.userId;
+
+    const channel = await Channel.findOne({ joinLink: link });
+
+    if (!channel) {
+      return response.status(404).json({ message: "Channel not found." });
+    }
+
+    if (
+      channel.members.includes(userId) ||
+      channel.admin.toString() === userId
+    ) {
+      return response.status(200).json({ channel });
+    }
+
+    channel.members.push(userId);
+    await channel.save();
+
+    await channel.populate(
+      "admin members",
+      "firstName lastName email _id image color"
+    );
+
+    return response.status(200).json({ channel });
+  } catch (error) {
+    console.error("Error joining channel by link:", error);
+    return response.status(500).json({ message: "Internal Server Error" });
   }
 };
 
