@@ -2,12 +2,15 @@ import { BrowserRouter as Router, Routes, Route, Navigate }
   from 'react-router-dom';
 import Profile from '@/pages/profile';
 import Chat from '@/pages/chat';
-import AuthPage from '@/pages/auth'; // Renamed Auth to AuthPage
+import AuthPage from '@/pages/auth';
+import SignUpPage from '@/pages/auth/SignUpPage'; // Import the new SignUpPage
 // import apiClient from '@/lib/api-client'; // No longer needed for user fetching here
-// import { GET_USERINFO_ROUTE } from '@/lib/constants'; // No longer needed here
+// import { GET_USERINFO_ROUTE } from '@/lib/constants'; // Will be needed now
 import { useAppStore } from '@/store';
-import { useAuth, useUser } from '@clerk/clerk-react'; // Import Clerk hooks
+import { useAuth, useUser } from '@clerk/clerk-react'; // Clerk hooks
 import { useEffect } from 'react';
+import apiClient from '@/lib/api-client'; // Import apiClient
+import { GET_USERINFO_ROUTE } from '@/lib/constants'; // Import route constant
 
 // PrivateRoute using Clerk:
 // Children are rendered if user is loaded and authenticated (userId exists).
@@ -28,31 +31,64 @@ const AuthRoute = ({ children }) => {
 };
 
 function App() {
-  const { setUserInfo } = useAppStore();
-  const { isLoaded: isAuthLoaded, isSignedIn, userId: clerkAuthUserId } = useAuth(); // clerkAuthUserId is Clerk's own user ID from useAuth
-  const { user: clerkUser, isLoaded: isUserLoaded } = useUser(); // clerkUser contains detailed profile
+  const { setUserInfo } = useAppStore(); // Removed setSocket, will be handled in SocketContext
+  // getToken is not directly used here, but it's good to know it's available from useAuth if needed elsewhere.
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
 
   // Effect to update userInfo in Zustand store when Clerk user data changes
   useEffect(() => {
-    if (isSignedIn && clerkUser) {
-      // Store essential Clerk user details.
-      // The local MongoDB _id will be handled by API calls transparently using the Clerk JWT.
-      // Client-side userInfo.id will now be the Clerk User ID.
-      setUserInfo({
-        id: clerkUser.id, // This is Clerk's user ID (e.g., "user_2c...")
-        clerkId: clerkUser.id, // Explicitly store Clerk ID
-        firstName: clerkUser.firstName,
-        lastName: clerkUser.lastName,
-        email: clerkUser.primaryEmailAddress?.emailAddress,
-        image: clerkUser.imageUrl,
-        // profileSetup might need to be fetched from our backend or assumed true after Clerk signup
-        // color might also be from our backend
-        // For now, keep it simple with Clerk data.
-      });
-    } else if (!isSignedIn) {
-      setUserInfo(undefined);
+    const updateUserSession = async () => {
+      if (isSignedIn && clerkUser) {
+        try {
+          // apiClient should be configured to send the Clerk token automatically.
+          // This typically happens if Clerk's <ClerkProvider> wraps your app and
+          // it patches `fetch`, or if your apiClient instance has an interceptor
+          // to get the token using `clerk.session.getToken()`.
+          const response = await apiClient.get(GET_USERINFO_ROUTE);
+
+          const localUserData = response.data; // User object from your DB
+
+          setUserInfo({
+            // Prioritize local DB _id as the main 'id' for app consistency
+            id: localUserData.id, // This is MongoDB _id
+            clerkId: clerkUser.id, // Clerk's user ID
+            // Use Clerk's data as primary for names/image, fallback to local if clerk's is null/undefined
+            firstName: clerkUser.firstName ?? localUserData.firstName,
+            lastName: clerkUser.lastName ?? localUserData.lastName,
+            email: clerkUser.primaryEmailAddress?.emailAddress ?? localUserData.email,
+            image: clerkUser.imageUrl ?? localUserData.image,
+            profileSetup: localUserData.profileSetup, // From your backend
+            color: localUserData.color, // From your backend
+          });
+
+        } catch (error) {
+          console.error("Failed to fetch local user data:", error);
+          // Fallback to Clerk data only if local fetch fails critically
+          // This ensures basic user info is still available for UI.
+          setUserInfo({
+            id: clerkUser.id, // Fallback to Clerk ID as primary ID
+            clerkId: clerkUser.id,
+            firstName: clerkUser.firstName,
+            lastName: clerkUser.lastName,
+            email: clerkUser.primaryEmailAddress?.emailAddress,
+            image: clerkUser.imageUrl,
+            profileSetup: false, // Sensible default, or undefined
+            color: undefined,    // Sensible default, or undefined
+          });
+        }
+      } else if (!isSignedIn) {
+        setUserInfo(undefined);
+      }
+    };
+
+    // Only run updateUserSession when Clerk has loaded both auth and user states.
+    if (isAuthLoaded && isUserLoaded) {
+      updateUserSession();
     }
-  }, [isSignedIn, clerkUser, setUserInfo]);
+    // Dependencies: clerkUser can be an object, so stringify or use specific fields if causing re-runs.
+    // clerkUser.id is a good stable dependency.
+  }, [isSignedIn, clerkUser?.id, isAuthLoaded, isUserLoaded, setUserInfo]);
 
   if (!isAuthLoaded || !isUserLoaded) {
     // Show a global loading spinner or a minimal loading message
@@ -68,6 +104,14 @@ function App() {
           element={
             <AuthRoute>
               <AuthPage />
+            </AuthRoute>
+          }
+        />
+        <Route
+          path="/sign-up" // New route for sign-up
+          element={
+            <AuthRoute>
+              <SignUpPage />
             </AuthRoute>
           }
         />
