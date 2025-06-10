@@ -1,7 +1,6 @@
 import { Router } from "express";
 import {
   getAllContacts,
-  getAllContacts,
   getContactsForList,
   searchContacts,
 } from "../controllers/ContacsControllers.js"; // Note: Typo in original filename 'ContacsControllers.js'
