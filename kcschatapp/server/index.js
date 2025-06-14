@@ -14,7 +14,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 8747;
-const databaseURL = process.env.DATABSE_URL;
+const databaseURL = process.env.DATABASE_URL;
 
 // ✅ FIXED: Use CORS with fallback and full support for credentials
 app.use(
