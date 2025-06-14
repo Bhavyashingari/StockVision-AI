@@ -48,3 +48,7 @@ mongoose
   .catch((err) => {
     console.log(err.message);
   });
+
+  app.get('/api/auth/test', (req, res) => {
+  res.send('✅ API route working');
+});
