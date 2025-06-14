@@ -1,4 +1,4 @@
-name: Deploy server/ to Azure Web App - KCSChatapp
+name: Deploy backend from kcschatapp/server to Azure Web App
 
 on:
   push:
@@ -17,24 +17,19 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'  # or '20.x', but NOT 22.x unless tested
+          node-version: '18.x'
 
       - name: Install Dependencies
-        working-directory: server
+        working-directory: kcschatapp/server
         run: npm install
 
-      # Optional: if you have a build step inside /server
-      # - name: Build Server
-      #   working-directory: server
-      #   run: npm run build
-
       - name: Zip server folder
-        run: zip -r server.zip ./server
+        run: zip -r server.zip ./kcschatapp/server
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'KCSChatapp' # Azure Web App name
+          app-name: 'KCSChatapp'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: server.zip
