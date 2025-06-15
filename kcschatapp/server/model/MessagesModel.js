@@ -38,6 +38,25 @@ const messageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  channel: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Channels",
+    required: false,
+  },
+  isEdited: {
+    type: Boolean,
+    default: false,
+  },
+  editedAt: {
+    type: Date,
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+  },
+  originalContentType: {
+    type: String, // To store original type if changed on delete
+  },
 });
 
 const Message = mongoose.model("Messages", messageSchema);

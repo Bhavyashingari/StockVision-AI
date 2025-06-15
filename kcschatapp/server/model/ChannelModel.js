@@ -32,6 +32,12 @@ const channelSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  pinnedMessage: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Messages',
+    required: false,
+    default: null
+  }
 });
 
 channelSchema.pre("save", function (next) {

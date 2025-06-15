@@ -17,9 +17,11 @@ import { IoArrowBack } from "react-icons/io5";
 import { colors } from "@/lib/utils";
 
 const Profile = () => {
-  const { userInfo, setUserInfo } = useAppStore();
+  const { userInfo, setUserInfo, updateUserPreferences: storeUpdateUserPreferences } = useAppStore(); // Assuming updateUserPreferences exists
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  // Initialize allowDMs from userInfo, ensuring it's a boolean
+  const [allowDMs, setAllowDMs] = useState(!!userInfo.allowDirectMessages);
   const [image, setImage] = useState(null);
   const [hovered, setHovered] = useState(false);
   const fileInputRef = useRef(null);
@@ -35,7 +37,41 @@ const Profile = () => {
     if (userInfo.image) {
       setImage(`${HOST}/${userInfo.image}`);
     }
+    // Update local allowDMs state when userInfo changes from store (e.g., after initial fetch)
+    setAllowDMs(typeof userInfo.allowDirectMessages === 'boolean' ? userInfo.allowDirectMessages : true);
   }, [userInfo]);
+
+  const handleDmToggleChange = async (e) => {
+    const newAllowDMs = e.target.checked;
+    setAllowDMs(newAllowDMs); // Optimistically update UI
+
+    try {
+      const response = await apiClient.put(
+        "/users/settings/dm", // Corrected path based on backend
+        { allowDMs: newAllowDMs },
+        { withCredentials: true }
+      );
+
+      if (response.status === 200 && response.data.user) {
+        // Update userInfo in the store
+        if (storeUpdateUserPreferences) {
+            storeUpdateUserPreferences({ allowDirectMessages: response.data.user.allowDirectMessages });
+        } else {
+            // Fallback if dedicated action doesn't exist, though less ideal
+            setUserInfo({ ...userInfo, allowDirectMessages: response.data.user.allowDirectMessages });
+        }
+        toast.success("DM settings updated successfully.");
+      } else {
+        // Revert UI if API call failed or returned unexpected data
+        setAllowDMs(!newAllowDMs);
+        toast.error("Failed to update DM settings.");
+      }
+    } catch (error) {
+      console.error("Error updating DM settings:", error);
+      setAllowDMs(!newAllowDMs); // Revert UI on error
+      toast.error(error.response?.data?.message || "Failed to update DM settings.");
+    }
+  };
 
   const validateProfile = () => {
     if (!firstName) {
@@ -215,6 +251,21 @@ const Profile = () => {
             </div>
           </div>
         </div>
+
+        {/* DM Toggle Setting */}
+        <div className="flex items-center justify-between p-4 bg-[#2c2e3b] rounded-lg">
+          <label htmlFor="dmToggle" className="text-white text-lg cursor-pointer">
+            Allow Direct Messages
+          </label>
+          <input
+            type="checkbox"
+            id="dmToggle"
+            className="form-checkbox h-6 w-6 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 cursor-pointer"
+            checked={allowDMs}
+            onChange={handleDmToggleChange}
+          />
+        </div>
+
         <div className="w-full">
           <Button
             className="h-16 w-full bg-purple-700 hover:bg-purple-900 transition-all duration-300"

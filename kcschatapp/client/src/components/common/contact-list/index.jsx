@@ -66,6 +66,11 @@ const ContactList = ({ contacts, isChannel = false }) => {
             ) : (
               <span>{`${contact.firstName} ${contact.lastName}`}</span>
             )}
+            {contact.unreadCount > 0 && (
+              <span className="ml-auto bg-green-500 text-white text-xs font-semibold mr-3 px-2.5 py-0.5 rounded-full">
+                {contact.unreadCount}
+              </span>
+            )}
           </div>
         </div>
       ))}

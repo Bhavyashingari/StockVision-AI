@@ -31,6 +31,11 @@ const userSchema = new mongoose.Schema({
     type: Number,
     required: false,
   },
+  allowDirectMessages: {
+    type: Boolean,
+    default: true,
+    required: true,
+  },
 });
 
 userSchema.pre("save", async function (next) {

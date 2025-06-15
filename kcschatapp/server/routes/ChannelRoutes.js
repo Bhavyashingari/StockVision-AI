@@ -3,6 +3,8 @@ import {
   createChannel,
   getChannelMessages,
   getUserChannels,
+  addMembersToChannel,
+  pinMessageInChannel,
 } from "../controllers/ChannelControllers.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 
@@ -15,5 +17,11 @@ channelRoutes.get(
   verifyToken,
   getChannelMessages
 );
+channelRoutes.post(
+  "/:channelId/members",
+  verifyToken,
+  addMembersToChannel
+);
+channelRoutes.put("/:channelId/pin", verifyToken, pinMessageInChannel);
 
 export default channelRoutes;
