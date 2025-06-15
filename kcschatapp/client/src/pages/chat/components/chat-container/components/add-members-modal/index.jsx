@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { useAppStore } from "@/store";
 import { HOST } from "@/lib/constants";
-import { apiClient } from "@/lib/api-client";
+import  apiClient  from "@/lib/api-client";
 import { CHECK_USER_ROUTE } from "@/lib/constants"; // Assuming this is for all users, or we might need a new one
 import { toast } from "sonner";
 import { getColor } from "@/lib/utils";

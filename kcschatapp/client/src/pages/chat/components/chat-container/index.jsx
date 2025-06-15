@@ -1,7 +1,7 @@
 import ChatHeader from "./components/chat-header";
 import MessageBar from "./components/message-bar";
 import MessageContainer from "./components/message-container";
-import { apiClient } from "@/lib/api-client";
+import apiClient from "@/lib/api-client";
 import { toast } from "sonner";
 import { useAppStore } from "@/store"; // To access selectedChatData for optimistic updates or context
 

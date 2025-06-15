@@ -1,14 +1,13 @@
-import { RiCloseFill, RiPushpinFill, RiPushpinLine } from "react-icons/ri"; // Added RiPushpinFill for unpin icon
+import { RiCloseFill, RiPushpinFill } from "react-icons/ri"; // Removed unused RiPushpinLine
 import { useState } from "react";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { useAppStore } from "@/store";
-import { HOST, apiClient } from "@/lib/api-client"; // apiClient for API calls
+import { HOST } from "@/lib/constants";
 import { getColor } from "@/lib/utils";
 import AddMembersModal from "../add-members-modal";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button"; // For unpin button
+import { Button } from "@/components/ui/button";
 
-const ChatHeader = ({ handlePinMessage }) => { // Expect handlePinMessage from parent
+const ChatHeader = ({ handlePinMessage }) => {
   const { selectedChatData, closeChat, selectedChatType, userInfo } =
     useAppStore();
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
@@ -17,7 +16,6 @@ const ChatHeader = ({ handlePinMessage }) => { // Expect handlePinMessage from p
     setShowAddMembersModal(true);
   };
 
-  // Function to truncate message content for display
   const truncateContent = (content, maxLength = 50) => {
     if (!content) return "";
     if (content.length <= maxLength) return content;
@@ -30,35 +28,32 @@ const ChatHeader = ({ handlePinMessage }) => { // Expect handlePinMessage from p
         <div className="flex gap-5 items-center">
           <div className="flex gap-3 items-center justify-center">
             <div className="w-12 h-12 relative flex items-center justify-center">
-            {selectedChatType === "contact" ? (
-              <Avatar className="w-12 h-12 rounded-full overflow-hidden">
-                {selectedChatData.image ? (
-                  <AvatarImage
-                    src={`${HOST}/${selectedChatData.image}`}
-                    alt="profile"
-                    className="object-cover w-full h-full bg-black rounded-full"
-                  />
-                ) : (
-                  <div
-                    className={`uppercase w-12 h-12 text-lg   border-[1px] ${getColor(
-                      selectedChatData.color
-                    )} flex items-center justify-center rounded-full`}
-                  >
-                    {selectedChatData.firstName
-                      ? selectedChatData.firstName.split("").shift()
-                      : selectedChatData.email.split("").shift()}
-                  </div>
-                )}
-              </Avatar>
-            ) : (
-              <div
-                className={` bg-[#ffffff22] py-3 px-5 flex items-center justify-center rounded-full`}
-              >
-                #
-              </div>
-            )}
-          </div>
-          <div>
+              {selectedChatType === "contact" ? (
+                <Avatar className="w-12 h-12 rounded-full overflow-hidden">
+                  {selectedChatData.image ? (
+                    <AvatarImage
+                      src={`${HOST}/${selectedChatData.image}`}
+                      alt="profile"
+                      className="object-cover w-full h-full bg-black rounded-full"
+                    />
+                  ) : (
+                    <div
+                      className={`uppercase w-12 h-12 text-lg border-[1px] ${getColor(
+                        selectedChatData.color
+                      )} flex items-center justify-center rounded-full`}
+                    >
+                      {selectedChatData.firstName
+                        ? selectedChatData.firstName.charAt(0)
+                        : selectedChatData.email.charAt(0)}
+                    </div>
+                  )}
+                </Avatar>
+              ) : (
+                <div className="bg-[#ffffff22] py-3 px-5 flex items-center justify-center rounded-full">
+                  #
+                </div>
+              )}
+            </div>
             <div>
               <div className="flex items-center">
                 {selectedChatType === "channel" && selectedChatData.name}
@@ -68,25 +63,29 @@ const ChatHeader = ({ handlePinMessage }) => { // Expect handlePinMessage from p
                   </span>
                 )}
               </div>
-              {selectedChatType === "contact" &&
-              selectedChatData.firstName &&
-              selectedChatData.lastName
-                ? `${selectedChatData.firstName} ${selectedChatData.lastName}`
-                : selectedChatData.email}
+              <span>
+                {selectedChatType === "contact" &&
+                selectedChatData.firstName &&
+                selectedChatData.lastName
+                  ? `${selectedChatData.firstName} ${selectedChatData.lastName}`
+                  : selectedChatData.email}
+              </span>
             </div>
           </div>
         </div>
+
         <div className="flex items-center justify-center gap-5">
-        {selectedChatType === "channel" &&
-          userInfo && selectedChatData && selectedChatData.admin &&
-          userInfo.id === selectedChatData.admin._id && (
-            <button
-              className="text-neutral-300 bg-gray-700 hover:bg-gray-600 p-2 rounded-md focus:border-none focus:outline-none focus:text-white transition-all duration-300"
-              onClick={handleAddMembers}
-            >
-              Add Members
-            </button>
-          )}
+          {selectedChatType === "channel" &&
+            userInfo &&
+            selectedChatData?.admin &&
+            userInfo.id === selectedChatData.admin._id && (
+              <button
+                className="text-neutral-300 bg-gray-700 hover:bg-gray-600 p-2 rounded-md focus:border-none focus:outline-none focus:text-white transition-all duration-300"
+                onClick={handleAddMembers}
+              >
+                Add Members
+              </button>
+            )}
           <button
             className="text-neutral-300 focus:border-none focus:outline-none focus:text-white transition-all duration-300"
             onClick={closeChat}
@@ -102,17 +101,20 @@ const ChatHeader = ({ handlePinMessage }) => { // Expect handlePinMessage from p
           <div className="flex items-center gap-2">
             <RiPushpinFill className="text-yellow-400" />
             <span>
-              Pinned: {selectedChatData.pinnedMessage.sender?.firstName || "User"}:{" "}
-              {truncateContent(selectedChatData.pinnedMessage.content || selectedChatData.pinnedMessage.messageType)}
+              Pinned:{" "}
+              {selectedChatData.pinnedMessage.sender?.firstName || "User"}:{" "}
+              {truncateContent(
+                selectedChatData.pinnedMessage.content ||
+                  selectedChatData.pinnedMessage.messageType
+              )}
             </span>
-            {/* TODO: Add onClick to scroll to message if possible */}
           </div>
           {userInfo.id === selectedChatData.admin._id && (
             <Button
               variant="ghost"
               size="sm"
               className="p-1 h-auto text-neutral-400 hover:text-red-400"
-              onClick={() => handlePinMessage(selectedChatData._id, null)} // Unpin
+              onClick={() => handlePinMessage(selectedChatData._id, null)}
               title="Unpin Message"
             >
               <RiCloseFill className="text-lg" />
@@ -121,7 +123,7 @@ const ChatHeader = ({ handlePinMessage }) => { // Expect handlePinMessage from p
         </div>
       )}
 
-      {showAddMembersModal && selectedChatData && selectedChatData._id && (
+      {showAddMembersModal && selectedChatData?._id && (
         <AddMembersModal
           isOpen={showAddMembersModal}
           onClose={() => setShowAddMembersModal(false)}

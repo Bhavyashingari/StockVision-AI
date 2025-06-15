@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { IoMdArrowRoundDown } from "react-icons/io";
 import { IoCloseSharp } from "react-icons/io5";
 import { MdFolderZip } from "react-icons/md";
-import { Pencil, Trash2, Save, XCircle, Thumbtack } from "lucide-react"; // Added Thumbtack icon
+import { Pencil, Trash2, Save, XCircle, Pin } from "lucide-react"; // Added Thumbtack icon
 import { Button } from "@/components/ui/button"; // Button
 import { toast } from "sonner"; // Toast
 
@@ -224,7 +224,7 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
                   }
                   title={selectedChatData.pinnedMessage?._id === message._id ? "Unpin Message" : "Pin Message"}
                 >
-                  <Thumbtack size={16} />
+                  <Pin size={16} />
                 </Button>
               )}
           </div>
