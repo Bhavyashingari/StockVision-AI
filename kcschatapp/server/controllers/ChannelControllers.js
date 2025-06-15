@@ -27,6 +27,9 @@ export const createChannel = async (request, response, next) => {
 
     await newChannel.save();
 
+    await newChannel.populate('members', 'firstName lastName _id image color');
+    await newChannel.populate('admin', 'firstName lastName _id image color');
+
     return response.status(201).json({ channel: newChannel });
   } catch (error) {
     console.error("Error creating channel:", error);
@@ -39,7 +42,10 @@ export const getUserChannels = async (req, res) => {
     const userId = new mongoose.Types.ObjectId(req.userId);
     const channels = await Channel.find({
       $or: [{ admin: userId }, { members: userId }],
-    }).sort({ updatedAt: -1 });
+    })
+    .populate('members', 'firstName lastName _id image color')
+    .populate('admin', 'firstName lastName _id image color')
+    .sort({ updatedAt: -1 });
 
     return res.status(200).json({ channels });
   } catch (error) {
@@ -152,10 +158,9 @@ export const addMembersToChannel = async (request, response, next) => {
 
     await channel.save();
 
-    const updatedChannel = await Channel.findById(channelId).populate(
-      "members",
-      "firstName lastName _id image color"
-    );
+    const updatedChannel = await Channel.findById(channelId)
+      .populate("members", "firstName lastName _id image color")
+      .populate("admin", "firstName lastName _id image color");
 
     return response.status(200).json({ channel: updatedChannel });
   } catch (error) {

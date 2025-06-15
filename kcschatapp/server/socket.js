@@ -39,7 +39,8 @@ export const initSocket = (server) => {
       if (senderSocketIdOnError) {
         ioInstance.to(senderSocketIdOnError).emit("sendMessageError", {
           message: "Recipient not found.",
-          recipientId: recipientId
+          recipientId: recipientId,
+          tempId: message.tempId, // Pass back tempId
         });
       }
       return;
@@ -52,6 +53,7 @@ export const initSocket = (server) => {
           recipientId: recipientId,
           recipientName: `${recipientUser.firstName || ""} ${recipientUser.lastName || ""}`.trim() || recipientUser.email,
           messageContent: message.content, // Send back the original content
+          tempId: message.tempId, // Pass back tempId
         });
       }
       console.log(`DM blocked for user ${recipientId} by ${senderId}`);
@@ -80,9 +82,10 @@ export const initSocket = (server) => {
   };
 
   const sendChannelMessage = async (message) => {
-    const { channelId, sender, content, messageType, fileUrl } = message;
+    // Destructure mentionedUserIds from the message payload
+    const { channelId, sender, content, messageType, fileUrl, mentionedUserIds, tempId } = message;
 
-    // Create and save the message
+    // Create and save the message, including mentions
     const createdMessage = await Message.create({
       sender,
       recipient: null, // Channel messages don't have a single recipient
@@ -91,11 +94,15 @@ export const initSocket = (server) => {
       messageType,
       timestamp: new Date(),
       fileUrl,
+      mentions: mentionedUserIds || [], // Add mentions, default to empty array
     });
 
-    const messageData = await Message.findById(createdMessage._id)
+    // Populate sender and now also mentions
+    // Keep channel population if clients rely on it in the event, otherwise it can be removed if only channelId is needed
+    const populatedMessage = await Message.findById(createdMessage._id)
       .populate("sender", "id email firstName lastName image color")
-      .populate("channel") // Optionally populate channel info if needed in the event
+      .populate("mentions", "id email firstName lastName image color") // Populate mentions
+      .populate("channel") 
       .exec();
 
     // Add message to the channel
@@ -104,22 +111,26 @@ export const initSocket = (server) => {
     });
 
     // Fetch all members of the channel
-    const channel = await Channel.findById(channelId).populate("members");
+    const channel = await Channel.findById(channelId).populate("members admin"); // Ensure admin is populated for the Set logic
 
-    // messageData will include the populated channel field if you need it.
-    // For the event, we still want to send channelId explicitly for client handling.
-    const finalData = { ...messageData.toObject(), channelId: channel._id };
+    // Use populatedMessage for the event data
+    // Ensure channelId is part of the final payload if not relying on populated channel object directly
+    const eventData = { 
+      ...populatedMessage.toObject(), 
+      channelId: channel._id, // Explicitly include channelId
+      tempId: tempId // Include tempId for client-side optimistic update reconciliation
+    };
+    
     if (channel && channel.members) {
-      channel.members.forEach((member) => {
-        const memberSocketId = userSocketMapInstance.get(member._id.toString());
+      const memberIds = new Set(channel.members.map(member => member._id.toString()));
+      memberIds.add(channel.admin._id.toString()); // Add admin, Set handles duplicates
+
+      memberIds.forEach(memberId => {
+        const memberSocketId = userSocketMapInstance.get(memberId);
         if (memberSocketId) {
-          ioInstance.to(memberSocketId).emit("receive-channel-message", finalData);
+          ioInstance.to(memberSocketId).emit("receive-channel-message", eventData);
         }
       });
-      const adminSocketId = userSocketMapInstance.get(channel.admin._id.toString());
-      if (adminSocketId) {
-        ioInstance.to(adminSocketId).emit("receive-channel-message", finalData);
-      }
     }
   };
 

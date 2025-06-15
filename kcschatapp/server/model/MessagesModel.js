@@ -57,6 +57,11 @@ const messageSchema = new mongoose.Schema({
   originalContentType: {
     type: String, // To store original type if changed on delete
   },
+  mentions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Users', // Should match the model name User refers to, typically 'Users' if that's how User model is registered
+    default: []
+  }]
 });
 
 const Message = mongoose.model("Messages", messageSchema);

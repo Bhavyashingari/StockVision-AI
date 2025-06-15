@@ -1,17 +1,19 @@
+import MentionSuggestions from "./components/MainSuggestions"; // ✅ FIXED: move import to top
 import { IoSend } from "react-icons/io5";
 import { GrAttachment } from "react-icons/gr";
 import { RiEmojiStickerLine } from "react-icons/ri";
 import EmojiPicker from "emoji-picker-react";
-import { useEffect, useRef, useState, useCallback } from "react"; // Added useCallback
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useAppStore } from "@/store";
 import { useSocket } from "@/contexts/SocketContext";
 import { MESSAGE_TYPES, UPLOAD_FILE } from "@/lib/constants";
 import apiClient from "@/lib/api-client";
 
+
 const MessageBar = () => {
   const emojiRef = useRef();
   const fileInputRef = useRef();
-  const messageInputRef = useRef(); // Ref for the message input
+  const messageInputRef = useRef();
   const {
     selectedChatData,
     userInfo,
@@ -23,13 +25,10 @@ const MessageBar = () => {
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const socket = useSocket();
 
-  // States for @mention suggestions
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionQuery, setSuggestionQuery] = useState("");
-  const [filteredMembers, setFilteredMembers] = useState([]);
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const [currentMentionStartIndex, setCurrentMentionStartIndex] = useState(-1);
-
+  const [currentMentionedUserIds, setCurrentMentionedUserIds] = useState([]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -38,10 +37,8 @@ const MessageBar = () => {
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [emojiRef]);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleAddEmoji = (emoji) => {
     setMessage((msg) => msg + emoji.emoji);
@@ -56,154 +53,153 @@ const MessageBar = () => {
 
     let atIndex = -1;
     let query = "";
+    let activeMention = false;
 
-    // Find the @ symbol that the user is currently typing after
     for (let i = cursorPosition - 1; i >= 0; i--) {
-      if (text[i] === '@' && (i === 0 || text[i-1] === ' ')) { // Ensure @ is start of word
-        // Check if this @ is already part of a completed mention (e.g., @JohnDoe )
+      if (text[i] === '@' && (i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n')) {
         const partAfterAt = text.substring(i + 1, cursorPosition);
-        if (!partAfterAt.includes(' ')) { // If no space after @ up to cursor, it's active
+        const spaceAfterQuery = text.substring(cursorPosition).startsWith(' ');
+        if (!partAfterAt.includes(' ') && !spaceAfterQuery) {
           atIndex = i;
-          query = text.substring(i + 1, cursorPosition);
+          query = partAfterAt;
+          activeMention = true;
         }
         break;
       }
-      if (text[i] === ' ') break; // Stop if a space is found before an @
+      if (text[i] === ' ' || text[i] === '\n') {
+        if (atIndex === -1) activeMention = false;
+        break;
+      }
     }
 
-    if (atIndex !== -1) {
+    if (activeMention && atIndex !== -1) {
       setCurrentMentionStartIndex(atIndex);
       setSuggestionQuery(query);
-      const members = selectedChatData.members.filter(
-        (member) => member._id !== userInfo.id && // Exclude self
-                     (member.firstName?.toLowerCase().startsWith(query.toLowerCase()) ||
-                      member.lastName?.toLowerCase().startsWith(query.toLowerCase()) ||
-                      member.email?.toLowerCase().startsWith(query.toLowerCase()))
-      );
-      setFilteredMembers(members);
-      setShowSuggestions(members.length > 0);
-      setActiveSuggestionIndex(0);
+      setShowSuggestions(true);
     } else {
       setShowSuggestions(false);
       setCurrentMentionStartIndex(-1);
+      setSuggestionQuery("");
     }
-  }, [selectedChatData, selectedChatType, userInfo]);
-
+  }, [selectedChatData, selectedChatType]);
 
   const handleMessageChange = (event) => {
     const text = event.target.value;
-    const cursorPosition = event.target.selectionStart;
     setMessage(text);
-    processSuggestions(text, cursorPosition);
+    processSuggestions(text, event.target.selectionStart);
+    if (text === "") setCurrentMentionedUserIds([]);
   };
 
   const handleSelectSuggestion = (member) => {
     if (currentMentionStartIndex === -1) return;
 
     const textBeforeMention = message.substring(0, currentMentionStartIndex);
-    const mention = `@${member.firstName}${member.lastName || ""} `; // Add space after mention
-    const textAfterMention = message.substring(currentMentionStartIndex + suggestionQuery.length + 1); // +1 for @
+    const mentionDisplayName = `${member.firstName}${member.lastName || ""}`;
+    const mention = `@${mentionDisplayName} `;
+    const queryEndPosition = currentMentionStartIndex + suggestionQuery.length + 1;
+    const textAfterMention = message.substring(queryEndPosition);
 
     setMessage(textBeforeMention + mention + textAfterMention);
+    setCurrentMentionedUserIds((prevIds) => {
+      const newIds = new Set([...prevIds, member._id]);
+      return Array.from(newIds);
+    });
+
     setShowSuggestions(false);
-    setFilteredMembers([]);
     setSuggestionQuery("");
     setCurrentMentionStartIndex(-1);
 
-    // Focus and set cursor position after the inserted mention
     setTimeout(() => {
-        if (messageInputRef.current) {
-            messageInputRef.current.focus();
-            const newCursorPosition = textBeforeMention.length + mention.length;
-            messageInputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-        }
+      if (messageInputRef.current) {
+        messageInputRef.current.focus();
+        const newCursorPosition = textBeforeMention.length + mention.length;
+        messageInputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+      }
     }, 0);
   };
 
   const handleKeyDown = (event) => {
-    if (showSuggestions && filteredMembers.length > 0) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActiveSuggestionIndex((prevIndex) => (prevIndex + 1) % filteredMembers.length);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveSuggestionIndex((prevIndex) => (prevIndex - 1 + filteredMembers.length) % filteredMembers.length);
-      } else if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault();
-        handleSelectSuggestion(filteredMembers[activeSuggestionIndex]);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        setShowSuggestions(false);
-      }
+    if (event.key === "Escape" && showSuggestions) {
+      event.preventDefault();
+      setShowSuggestions(false);
     }
   };
 
-
   const handleSendMessage = async () => {
-    if (message.trim() === "") return; // Don't send empty messages
+    if (message.trim() === "") {
+      setCurrentMentionedUserIds([]);
+      return;
+    }
+
+    const tempId = Date.now().toString();
+
     if (selectedChatType === "contact") {
       socket.emit("sendMessage", {
         sender: userInfo.id,
         content: message,
         recipient: selectedChatData._id,
         messageType: MESSAGE_TYPES.TEXT,
-        audioUrl: undefined,
-        fileUrl: undefined,
+        tempId,
       });
     } else if (selectedChatType === "channel") {
       socket.emit("send-channel-message", {
         sender: userInfo.id,
         content: message,
         messageType: MESSAGE_TYPES.TEXT,
-        audioUrl: undefined,
-        fileUrl: undefined,
         channelId: selectedChatData._id,
+        mentionedUserIds: currentMentionedUserIds,
+        tempId,
       });
     }
+
     setMessage("");
+    setCurrentMentionedUserIds([]);
+    setShowSuggestions(false);
   };
 
   const handleAttachmentChange = async (event) => {
     try {
       const file = event.target.files[0];
+      if (!file) return;
 
-      if (file) {
-        const formData = new FormData();
-        formData.append("file", file);
-        setIsUploading(true);
-        const response = await apiClient.post(UPLOAD_FILE, formData, {
-          withCredentials: true,
-          onUploadProgress: (data) => {
-            setFileUploadProgress(Math.round((100 * data.loaded) / data.total));
-          },
-        });
+      const tempId = Date.now().toString();
+      const formData = new FormData();
+      formData.append("file", file);
+      setIsUploading(true);
 
-        if (response.status === 200 && response.data) {
-          setIsUploading(false);
-          if (selectedChatType === "contact") {
-            socket.emit("sendMessage", {
-              sender: userInfo.id,
-              content: undefined,
-              recipient: selectedChatData._id,
-              messageType: MESSAGE_TYPES.FILE,
-              audioUrl: undefined,
-              fileUrl: response.data.filePath,
-            });
-          } else if (selectedChatType === "channel") {
-            socket.emit("send-channel-message", {
-              sender: userInfo.id,
-              content: undefined,
-              messageType: MESSAGE_TYPES.FILE,
-              audioUrl: undefined,
-              fileUrl: response.data.filePath,
-              channelId: selectedChatData._id,
-            });
-          }
+      const response = await apiClient.post(UPLOAD_FILE, formData, {
+        withCredentials: true,
+        onUploadProgress: (data) => {
+          setFileUploadProgress(Math.round((100 * data.loaded) / data.total));
+        },
+      });
+
+      setIsUploading(false);
+      if (response.status === 200 && response.data) {
+        const payload = {
+          sender: userInfo.id,
+          fileUrl: response.data.filePath,
+          messageType: MESSAGE_TYPES.FILE,
+          tempId,
+        };
+
+        if (selectedChatType === "contact") {
+          socket.emit("sendMessage", {
+            ...payload,
+            recipient: selectedChatData._id,
+          });
+        } else {
+          socket.emit("send-channel-message", {
+            ...payload,
+            channelId: selectedChatData._id,
+            mentionedUserIds: [],
+          });
         }
       }
     } catch (error) {
       setIsUploading(false);
-      console.log({ error });
+      setFileUploadProgress(0);
+      console.error("Error uploading file:", error);
     }
   };
 
@@ -215,21 +211,14 @@ const MessageBar = () => {
 
   return (
     <div className="h-[10vh] bg-[#1c1d25] flex justify-center items-center px-8 gap-6 mb-5 relative">
-      {/* Suggestions Popup */}
-      {showSuggestions && filteredMembers.length > 0 && selectedChatType === "channel" && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f303b] border border-gray-600 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-          {filteredMembers.map((member, index) => (
-            <div
-              key={member._id}
-              className={`p-3 cursor-pointer hover:bg-[#8417ff]/30 ${
-                index === activeSuggestionIndex ? "bg-[#8417ff]/50" : ""
-              }`}
-              onClick={() => handleSelectSuggestion(member)}
-            >
-              {member.firstName} {member.lastName || ""} ({member.email})
-            </div>
-          ))}
-        </div>
+      {selectedChatType === "channel" && selectedChatData && (
+        <MentionSuggestions
+          members={selectedChatData.members || []}
+          admin={selectedChatData.admin}
+          query={suggestionQuery}
+          onSelectUser={handleSelectSuggestion}
+          show={showSuggestions}
+        />
       )}
 
       <div className="flex-1 flex bg-[#2a2b33] rounded-md items-center gap-5 pr-5">
@@ -241,19 +230,19 @@ const MessageBar = () => {
           value={message}
           onChange={handleMessageChange}
           onKeyDown={handleKeyDown}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 100)} // Delay to allow click on suggestion
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 100)}
         />
         <button
           className="text-neutral-300 focus:border-none focus:outline-none focus:text-white transition-all duration-300"
-          onClick={handleAttachmentClick} // Trigger the file input click
+          onClick={handleAttachmentClick}
         >
           <GrAttachment className="text-2xl" />
         </button>
         <input
           type="file"
-          className="hidden" // Hide the file input element
+          className="hidden"
           ref={fileInputRef}
-          onChange={handleAttachmentChange} // Handle file selection
+          onChange={handleAttachmentChange}
         />
         <div className="relative">
           <button

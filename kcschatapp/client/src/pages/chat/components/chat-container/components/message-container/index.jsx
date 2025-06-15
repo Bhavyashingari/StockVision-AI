@@ -153,6 +153,78 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
     setDownloadProgress(0);
   };
 
+  const renderMessageWithMentions = (content, mentions, currentUserId) => {
+    if (!content) return ""; // Handle null or undefined content
+    if (!mentions || mentions.length === 0) {
+      return content;
+    }
+  
+    let parts = [content];
+  
+    mentions.forEach(user => {
+      if (!user || !user.firstName) return; // Skip if user or firstName is undefined
+      
+      // Create regex for variations: @FirstName, @FirstNameLastName
+      // This regex tries to match @ followed by FirstName, optionally followed by LastName
+      // It's crucial that the mention format saved in content by MessageBar matches what's searched here.
+      // Current MessageBar saves `@FirstNameLastName ` (with space)
+      const mentionPatternNoSpace = `@${user.firstName}${user.lastName || ""}`; // Used for display
+      const mentionPatternWithSpace = `${mentionPatternNoSpace} `; // Actual pattern in text from MessageBar
+      
+      // Regex to find @FirstNameLastName or @FirstName not followed by more letters from the same LastName
+      // This is tricky. A simpler approach based on the exact string saved by MessageBar is better.
+      // Let's assume the text contains the exact string like "@FirstNameLastName" (without the trailing space for replacement)
+      // The trailing space is important for word boundary but makes replacement harder.
+      // For now, we'll look for the version without the trailing space for replacement, and display it.
+      // The server provides populated `mentions`. The client-side suggestion inserts a display name.
+      
+      const tempParts = [];
+      parts.forEach(part => {
+        if (typeof part === 'string') {
+          // Attempt to split by the @FirstNameLastName format.
+          // The actual string in content might be "@FirstNameLastName " (with a space)
+          // or just "@FirstName "
+          // We need to be careful here. The simplest is to assume exact match of @FirstNameLastName
+          
+          let currentString = part;
+          let resultParts = [];
+          
+          // Try to match @FirstNameLastName (if last name exists)
+          let searchMention = `@${user.firstName}${user.lastName || ""}`;
+          
+          let startIndex = currentString.indexOf(searchMention);
+          while(startIndex !== -1) {
+            // Push the part before the mention
+            resultParts.push(currentString.substring(0, startIndex));
+            // Push the mention span
+            resultParts.push(
+              <span
+                key={`${user._id}-${startIndex}`}
+                className={`mention ${user._id === currentUserId ? 'mention-me' : ''}`}
+                data-user-id={user._id}
+                style={{ color: user.color || '#00aaff', fontWeight: 'bold', cursor:'pointer' }}
+                title={`${user.firstName} ${user.lastName || ''} (${user.email})`} // Tooltip for mention
+              >
+                {searchMention}
+              </span>
+            );
+            // Update currentString to the part after the mention
+            currentString = currentString.substring(startIndex + searchMention.length);
+            startIndex = currentString.indexOf(searchMention);
+          }
+          resultParts.push(currentString); // Push the remaining part of the string
+          tempParts.push(...resultParts.filter(p => p !== "")); // Filter out empty strings
+
+        } else {
+          tempParts.push(part); // Keep existing JSX elements
+        }
+      });
+      parts = tempParts;
+    });
+    return parts;
+  };
+  
+
   const renderMessages = () => {
     let lastDate = null;
     return selectedChatMessages.map((message) => { // Removed index from key, use message._id
@@ -164,7 +236,7 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
       // If editing this message
       if (editingMessageId === message._id && !message.isDeleted) {
         return (
-          <div key={message._id} className={`message my-2 ${isSender ? "text-right" : "text-left"}`}>
+          <div key={message._id} id={`message-${message._id}`} className={`message my-2 ${isSender ? "text-right" : "text-left"}`}>
              {showDate && (
               <div className="text-center text-gray-500 my-2">
                 {moment(message.timestamp).format("LL")}
@@ -191,7 +263,7 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
       }
 
       return (
-        <div key={message._id} className={`message group relative my-1 ${ selectedChatType === "channel" ? (isSender ? "text-right" : "text-left") : (message.sender === selectedChatData._id ? "text-left" : "text-right") }`}>
+        <div key={message._id} id={`message-${message._id}`} className={`message group relative my-1 ${ selectedChatType === "channel" ? (isSender ? "text-right" : "text-left") : (message.sender === selectedChatData._id ? "text-left" : "text-right") }`}>
           {showDate && (
             <div className="text-center text-gray-500 my-2">
               {moment(message.timestamp).format("LL")}
@@ -202,12 +274,16 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
           <div className="absolute top-0 right-0 flex items-center p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
             {isSender && ( // Edit and Delete for sender
               <>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-yellow-400 hover:text-yellow-300" onClick={() => startEditMode(message)}>
-                  <Pencil size={16} />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400" onClick={() => handleDeleteMessage(message._id)}>
-                  <Trash2 size={16} />
-                </Button>
+                {message.messageType === "text" && !message.isDeleted && ( // Only show edit for own, non-deleted text messages
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-yellow-400 hover:text-yellow-300" onClick={() => startEditMode(message)} title="Edit Message">
+                    <Pencil size={16} />
+                  </Button>
+                )}
+                {!message.isDeleted && ( // Delete for own, non-deleted messages
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400" onClick={() => handleDeleteMessage(message._id)} title="Delete Message">
+                    <Trash2 size={16} />
+                  </Button>
+                )}
               </>
             )}
             {selectedChatType === "channel" &&
@@ -258,12 +334,12 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
         {message.messageType === MESSAGE_TYPES.TEXT && (
           <div
             className={`${
-              !isSender // Direct comparison to selectedChatData._id might be problematic if selectedChatData is not the other user.
+              !isSender 
                 ? "bg-[#8417ff]/5 text-[#8417ff]/90 border-[#8417ff]/50"
                 : "bg-[#2a2b33]/50 text-white/80 border-[#ffffff]/20"
             } border inline-block p-4 rounded my-1 max-w-[50%] break-words`}
           >
-            {message.content}
+            {renderMessageWithMentions(message.content, message.mentions, userInfo.id)}
           </div>
         )}
         {message.messageType === MESSAGE_TYPES.FILE && (
@@ -357,7 +433,7 @@ const MessageContainer = ({ handlePinMessage }) => { // Added handlePinMessage p
                 : "bg-[#2a2b33]/50 text-white/80 border-[#ffffff]/20"
             } border inline-block p-4 rounded my-1 max-w-[50%] break-words ${!isSender ? "ml-8" : ""}`}
           >
-            {message.content}
+            {renderMessageWithMentions(message.content, message.mentions, userInfo.id)}
           </div>
         )}
         {message.messageType === MESSAGE_TYPES.FILE && (

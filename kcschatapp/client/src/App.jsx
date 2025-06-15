@@ -11,6 +11,8 @@ import Auth from "@/pages/auth";
 import apiClient from "@/lib/api-client";
 import { GET_USERINFO_ROUTE } from "@/lib/constants";
 import { useAppStore } from "@/store";
+import { SocketProvider } from "./contexts/SocketContext";
+import WebSocketEvents from "./components/WebSocketEvents"; // Import WebSocketEvents
 
 const PrivateRoute = ({ children }) => {
   const { userInfo } = useAppStore();
@@ -58,10 +60,12 @@ function App() {
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route
-          path="/auth"
+    <SocketProvider>
+      <WebSocketEvents /> {/* Add WebSocketEvents component here */}
+      <Router>
+        <Routes>
+          <Route
+            path="/auth"
           element={
             <AuthRoute>
               <Auth />
@@ -84,9 +88,10 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/auth" />} />
-      </Routes>
-    </Router>
+          <Route path="*" element={<Navigate to="/auth" />} />
+        </Routes>
+      </Router>
+    </SocketProvider>
   );
 }
 

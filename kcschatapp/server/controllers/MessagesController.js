@@ -109,16 +109,15 @@ export const deleteMessage = async (req, res, next) => {
     } else if (message.channel) { // Channel Message
       const channel = await Channel.findById(message.channel._id).populate("members admin");
       if (channel) {
-        channel.members.forEach(member => {
-          const memberSocketId = userSocketMap.get(member._id.toString());
+        const memberIds = new Set(channel.members.map(member => member._id.toString()));
+        memberIds.add(channel.admin._id.toString()); // Add admin, Set handles duplicates
+
+        memberIds.forEach(memberId => {
+          const memberSocketId = userSocketMap.get(memberId);
           if (memberSocketId) {
             io.to(memberSocketId).emit("messageDeleted", eventData);
           }
         });
-        const adminSocketId = userSocketMap.get(channel.admin._id.toString());
-        if (adminSocketId) {
-           io.to(adminSocketId).emit("messageDeleted", eventData);
-        }
       }
     }
 
@@ -196,16 +195,15 @@ export const editMessage = async (req, res, next) => {
     } else if (message.channel) { // Channel Message
       const channel = await Channel.findById(message.channel._id).populate("members admin");
       if (channel) {
-        channel.members.forEach(member => {
-          const memberSocketId = userSocketMap.get(member._id.toString());
+        const memberIds = new Set(channel.members.map(member => member._id.toString()));
+        memberIds.add(channel.admin._id.toString()); // Add admin, Set handles duplicates
+
+        memberIds.forEach(memberId => {
+          const memberSocketId = userSocketMap.get(memberId);
           if (memberSocketId) {
             io.to(memberSocketId).emit("messageEdited", eventData);
           }
         });
-         const adminSocketId = userSocketMap.get(channel.admin._id.toString());
-        if (adminSocketId) {
-           io.to(adminSocketId).emit("messageEdited", eventData);
-        }
       }
     }
 
